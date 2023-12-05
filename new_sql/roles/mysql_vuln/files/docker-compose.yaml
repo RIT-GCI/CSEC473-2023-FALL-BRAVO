@@ -1,0 +1,42 @@
+version: '3'
+
+
+services:
+  db:
+    image: mariadb:10.5
+    container_name: db
+    restart: always
+      #entrypoint: [mariadb, --verbose, --transaction-isolation=READ-COMMITTED, --binlog-format=ROW]
+      #entrypoint: [mariadb, --binlog-format=ROW]
+    volumes:
+      - "./db:/var/lib/mysql"
+    ports:
+      - 3306:3306
+    networks:
+      - db_net
+    environment:
+      - MYSQL_ROOT_PASSWORD=[redacted]
+      - MYSQL_PASSWORD=[redacted]
+      - MYSQL_DATABASE=[redacted]
+      - MYSQL_USER=[redacted]
+      - TZ="America/New_York"
+
+  site: 
+    image: php:8.0-apache
+    container_name: php
+    restart: always
+    entrypoint: 
+    volumes:
+      - "./site:/var/www/html"
+    ports:
+      - 80:80
+    networks:
+      - db_net
+  
+
+networks:
+  db_net:
+    ipam:
+      config:
+        - subnet: 172.16.12.34/29
+

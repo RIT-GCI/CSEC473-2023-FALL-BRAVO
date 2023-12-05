@@ -1,0 +1,134 @@
+
+
+- name: Copy Docker Compose
+  become: yes
+  copy:
+    src: docker-compose.yaml
+    dest: /root/docker-compose.yaml
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Copy Site
+  become: yes
+  copy:
+    src: site
+    dest: /root/
+    owner: root
+    group: root
+
+- name: Set Docker Compose Creds
+  become: yes
+  lineinfile:
+    dest: /root/docker-compose.yaml
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - { regexp: 
+'      - MYSQL_PASSWORD=.*', line:
+'      - MYSQL_PASSWORD={{ MYSQL_PW | trim }}' 
+      }
+    - { regexp: 
+'      - MYSQL_ROOT_PASSWORD=.*', line:
+'      - MYSQL_ROOT_PASSWORD={{ MYSQL_ROOT_PW | trim }}' 
+      }
+    - { regexp: 
+'      - MYSQL_DATABASE=.*', line:
+'      - MYSQL_DATABASE={{ MYSQL_DB | trim }}' 
+      }
+    - { regexp: 
+'      - MYSQL_USER=.*', line:
+'      - MYSQL_USER={{ MYSQL_USER | trim }}' 
+      }
+
+- name: Set PHP Creds
+  become: yes
+  lineinfile:
+    dest: /root/site/consts.php
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - { regexp: 
+'define\("DB_HOST",.*', line:
+'define("DB_HOST", "db");' 
+      }
+    - { regexp: 
+'define\("DB_USER",.*', line:
+'define("DB_USER", "{{ MYSQL_USER | trim }}");' 
+      }
+    - { regexp: 
+'define\("DB_PASS",.*', line:
+'define("DB_PASS", "{{ MYSQL_PW | trim }}");' 
+      }
+    - { regexp: 
+'define\("DB_DB",.*', line:
+'define("DB_DB","classified");' 
+      }
+
+- name: Clear DB (if it exists)
+  become: yes
+  file:
+    path: /root/db
+    state: "absent"
+
+- name: Pull Docker Image Updates
+  become: yes
+  shell:
+    chdir: /root
+    cmd: docker compose pull
+
+- name: Shut Down Docker Setup
+  become: yes
+  shell:
+    chdir: /root
+    cmd: docker compose down
+
+- name: Start Up Docker Setup
+  become: yes
+  shell:
+    chdir: /root
+    cmd: docker compose up -d --build
+
+- name: Wait for Docker Containers to Spin Up...
+  pause:
+    seconds: 10
+
+- name: Create keys Table
+  become: yes
+  ansible.builtin.shell: |-
+    docker exec -it db mysql -u root --password={{ MYSQL_ROOT_PW | trim }} --database=classified -e '
+            CREATE TABLE IF NOT EXISTS sshkeys (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sshkey TEXT NOT NULL,
+            UNIQUE (sshkey) );'
+
+- name: Insert Data into classified Table
+  become: yes
+  ansible.builtin.shell: |-
+    docker exec -it db mysql -u root --password={{ MYSQL_ROOT_PW | trim }} --database=classified -e '
+            INSERT INTO sshkeys (sshkey) VALUES ( "{{ item }}" );'
+  with_items: "{{ key_values }}"
+  ignore_errors: true
+
+#- name: Create users Table
+#  become: yes
+#  ansible.builtin.shell: |-
+#    docker exec -it db mysql -u root --password={{ MYSQL_ROOT_PW | trim }} --database=classified -e '
+#            CREATE TABLE IF NOT EXISTS users (
+#            id INT AUTO_INCREMENT PRIMARY KEY,
+#            username TEXT NOT NULL);'
+#
+#- name: Insert Data into classified Table
+#  become: yes
+#  ansible.builtin.shell: |-
+#    docker exec -it db mysql -u root --password={{ MYSQL_ROOT_PW | trim }} --database=classified -e '
+#            INSERT INTO users (username) VALUES ( "{{ item }}" );'
+#  with_items: "{{ db_users }}"
+
+- name: Give captain_ghost Tons Of Perms
+  become: yes
+  ansible.builtin.shell: |-
+    docker exec -it db mysql -u root --password={{ MYSQL_ROOT_PW | trim }} --database=classified -e '
+            GRANT ALL PRIVILEGES ON classified.* TO "{{ MYSQL_USER | trim }}"@"%";
+            '
+

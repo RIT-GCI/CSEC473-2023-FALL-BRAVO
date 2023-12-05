@@ -1,0 +1,6 @@
+---
+- name: Set up SQL shenanigans
+  hosts: federaltradecommisions
+  roles:
+    - role: docker_install
+    - role: mysql_vuln

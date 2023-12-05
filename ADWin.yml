@@ -1,0 +1,66 @@
+#Matthew Repecki mrr5298@rit.edu 9/22/2023
+---
+- name: Install and configure Active Directory
+  hosts: windows
+  gather_facts: no
+  tasks:
+  - name: Install AD Domain Services
+    win_feature:
+      name: AD-Domain-Services
+      state: present
+
+  - name: Install required features for AD
+    win_feature:
+      name:
+        - DNS
+        - RSAT-AD-Tools
+      state: present
+
+  - name: Install and configure AD forest
+    win_domain:
+      dns_domain_name: us.gov
+      safe_mode_password: SecurePassword123!
+      state: domain
+      domain_mode: Win2012
+      forest_mode: Win2012
+    register: domain_result
+
+  - name: Reboot if needed
+    win_reboot:
+    when: domain_result.reboot_required
+
+  - name: Add groups to AD
+    win_domain_group:
+      name: "{{ item }}"
+      scope: global
+      category: security
+    loop:
+      - President
+      - Agencies
+      - Randoms
+      # Add other groups as needed
+      
+  - name: Add users to AD
+    win_domain_user:
+      name: "{{ item.name }}"
+      password: "{{ item.password }}"
+      state: present
+      groups: "{{ item.groups }}"
+      attributes:
+        givenName: "{{ item.first_name }}"
+        sn: "{{ item.last_name }}"
+        displayName: "{{ item.first_name }} {{ item.last_name }}"
+        # Add other attributes as needed
+    loop:
+      - { name: 'GRAYTEAM', password: 'Password123!', groups: ['President','Agencies','Domain Admins'], first_name: 'NO', last_name: 'TOUCH' }
+      - { name: 'cia', password: 'SecuristGovtNA1773', groups: ['Agencies','Domain Admins'], first_name: 'Spooky', last_name: 'Spook' }
+      - { name: 'fbi', password: 'SecuristGovtNA1773', groups: ['Agencies','Domain Admins'], first_name: 'Spooky', last_name: 'Spook' }
+      - { name: 'irs', password: 'SecuristGovtNA1773', groups: ['Agencies'], first_name: 'Money', last_name: 'Tax' }
+      - { name: 'airforce', password: 'SecuristGovtNA1773', groups: ['Agencies'], first_name: 'Planes go', last_name: 'Whoosh' }
+      - { name: 'military', password: 'SecuristGovtNA1773', groups: ['Agencies'], first_name: 'Bomb', last_name: 'Country' }
+      - { name: 'HacksawRidge', password: 'SecuristGovtNA1773', groups: ['Randoms'], first_name: 'Private', last_name: 'Ryan' }
+      - { name: 'ForestGump', password: 'SecuristGovtNA1773', groups: ['Randoms'], first_name: 'Forest', last_name: 'Gump' }
+
+
+      # Add other users as needed
+    no_log: True  # Do not log user creation, as it contains sensitive information.
